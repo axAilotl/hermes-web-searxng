@@ -1,5 +1,6 @@
 """Check directory installation through the current Hermes loader."""
 
+import shutil
 from pathlib import Path
 
 import yaml
@@ -11,7 +12,13 @@ def test_real_hermes_discovery_and_backend_resolution(tmp_path, monkeypatch):
 
     home = tmp_path / "hermes"
     (home / "plugins").mkdir(parents=True)
-    (home / "plugins" / "hermes-web-searxng").symlink_to(Path(__file__).resolve().parents[1])
+    shutil.copytree(
+        Path(__file__).resolve().parents[1],
+        home / "plugins" / "hermes-web-searxng",
+        ignore=shutil.ignore_patterns(
+            ".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache"
+        ),
+    )
     (home / "config.yaml").write_text(
         yaml.safe_dump(
             {

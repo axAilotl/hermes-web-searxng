@@ -3,12 +3,17 @@ version: 0.1.0
 description: "Standalone SearXNG search backend for Hermes."
 author: axAilotl
 kind: backend
+requires_hermes: ">=0.23.0"
 provides_web_providers:
   - searxng-local
 provides_tools: []
 python_dependencies:
   - "httpx>=0.27,<1"
 config_schema:
+  api_token:
+    type: secret
+    env: SEARXNG_API_TOKEN
+    description: "Optional Bearer token, stored by Hermes in the active profile secret store."
   api_url:
     type: str
     description: "SearXNG service URL; falls back to SEARXNG_URL."

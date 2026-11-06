@@ -1,32 +1,36 @@
 # Hermes Web SearXNG
 
-Standalone SearXNG search plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
-It connects Hermes' existing `web_search` tool to your SearXNG JSON API.
+Web search through your SearXNG JSON API, with optional proxy authentication and per-profile search settings.
+A standalone [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin.
 
-The backend ID is **`searxng-local`**, so it coexists with Hermes' bundled
-`searxng` backend without replacing it. This plugin does not extract pages.
-The separate `hermes-web-crawl4ai` plugin can provide that capability, or you
-can choose any other extraction backend.
+## Requirements
 
-## Install from this checkout
+- Hermes **0.23.0 or newer**, using its supported Python runtime (currently 3.14).
+- A reachable SearXNG server. It can run on the same machine, another computer,
+  or a private server. The plugin does not install the server.
+- HTTP(S) access from the machine running Hermes to that service.
 
-This is a new local repository; it has not yet been published to GitHub.
-Replace the source path when installing on another machine:
+The plugin uses Python and HTTP; it has no desktop, shell, distro, username,
+absolute-path, or local-container dependency. Its service URL is always supplied
+by the user. Linux, macOS, and Windows are covered by the CI matrix.
 
-```bash
-export HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
-mkdir -p "$HERMES_HOME/plugins"
-git clone /home/vega/Projects/hermes-web-searxng "$HERMES_HOME/plugins/hermes-web-searxng"
-hermes plugins enable hermes-web-searxng
+## Install
+
+```sh
+hermes plugins install axAilotl/hermes-web-searxng --enable
 ```
 
-Enabling uses Hermes' dependency admission workflow to provide `httpx`.
-Start a new Hermes session and enable the standard `web` toolset if needed.
-For profiles, set `HERMES_HOME` to the intended profile explicitly.
+Accept Hermes' dependency prompt. For unattended installation, add `--yes-deps`.
+This is a direct GitHub install; catalog inclusion requires separate maintainer review.
+
+Configure the active Hermes profile. If you use profiles, select the intended
+one first, or set `HERMES_HOME` to its directory. The default is `~/.hermes`.
+Start a new Hermes session after installing, and ensure the standard `web`
+toolset is enabled in `hermes tools`.
 
 ## Configure
 
-Merge into that profile's `config.yaml`, preserving its other entries:
+Merge this into your active profile's `config.yaml`, preserving other entries:
 
 ```yaml
 plugins:
@@ -36,21 +40,21 @@ plugins:
     hermes-web-searxng:
       settings:
         api_url: http://localhost:8080
-        timeout_seconds: 15
-        language: en
-        # categories: general
-        # engines: bing,duckduckgo
-        # safesearch: 1
 
 web:
   search_backend: searxng-local
 ```
 
-`api_url` falls back to `SEARXNG_URL` when unset. Settings are read through
-`ctx.get_config()` on each call and can be edited in Hermes' plugin settings
-form. Hermes' legacy `config` subtree is also accepted by that API.
+Replace `localhost` when the service runs elsewhere. If Hermes itself runs in
+Docker, `localhost` means the Hermes container, not your computer; use a shared
+Docker network service name or an address reachable from that container.
 
-SearXNG must allow JSON responses in its server-side `settings.yml`:
+`api_url` falls back to `SEARXNG_URL`. For a reverse proxy that requires a Bearer
+token, store `SEARXNG_API_TOKEN` in the active profile's `.env` or secret source,
+or enter it in the plugin's masked API token setting. SearXNG itself normally
+needs no authentication. Never put credentials in the URL.
+
+SearXNG must allow JSON output in its server-side `settings.yml`:
 
 ```yaml
 search:
@@ -59,13 +63,31 @@ search:
     - json
 ```
 
-If your reverse proxy requires a Bearer token, store `SEARXNG_API_TOKEN` in the
-profile's `.env` or secret source. Credentials do not belong in `api_url` or
-plugin metadata. SearXNG itself usually needs no authentication.
+Follow the [official SearXNG deployment guide](https://docs.searxng.org/admin/installation-docker.html)
+if you need a server. A 403 from `/search?format=json` often means JSON output
+is disabled; other causes include proxy authentication and rate limiting.
 
-## Pair with Crawl4AI
+Optional plugin settings: `timeout_seconds` (default 15, bounded 1–120),
+`language`, comma-separated `categories`, comma-separated `engines`, and
+`safesearch` (0, 1, or 2). Results are ranked by score, deduplicated by URL,
+and capped at 1–20. Malformed rows are skipped; HTTP, timeout, and invalid-JSON
+failures become tool error results.
 
-Install and enable `hermes-web-crawl4ai` separately, then merge these additions:
+The backend ID is `searxng-local`, so it coexists with Hermes' built-in
+`searxng`. This standalone implementation adds per-profile settings and
+optional Bearer authentication; it does not replace core tools. To return to
+the built-in provider, select `web.search_backend: searxng` and disable this plugin.
+
+## Use both plugins together
+
+Install each independently:
+
+```sh
+hermes plugins install axAilotl/hermes-web-searxng --enable
+hermes plugins install axAilotl/hermes-web-crawl4ai --enable
+```
+
+Merge the following configuration with your existing profile:
 
 ```yaml
 plugins:
@@ -79,53 +101,76 @@ plugins:
     hermes-web-crawl4ai:
       settings:
         api_url: http://localhost:11235
-
 web:
   search_backend: searxng-local
   extract_backend: crawl4ai
 ```
 
-Each plugin works independently. Switching from bundled SearXNG requires only
-installing/enabling this plugin and changing `web.search_backend` from `searxng`
-to `searxng-local`; the existing `SEARXNG_URL` still works. To switch back, select
-`searxng` again and disable `hermes-web-searxng`.
+Neither plugin requires the other. You can pair either with another provider.
 
-## Behavior
+## Privacy and network behavior
 
-- Queries use `/search?format=json` with an optional language, engine list,
-  category list, and safe-search setting.
-- Results are sorted by score, deduplicated by URL, and capped at 1–20 results.
-- Malformed result rows are skipped. HTTP errors, invalid JSON, and timeouts
-  return Hermes error results; a 403 includes the JSON-format configuration hint.
-- Service redirects are refused, so a proxy cannot forward the Bearer token
-  to another endpoint. Private service addresses are allowed for self-hosting.
-- Search returns links and snippets; it does not fetch the result URLs.
+The plugin sends requests only to the configured service. SearXNG forwards
+queries to its enabled search engines; Crawl4AI fetches the requested pages.
+These services determine where the requests ultimately go. The plugins send
+no telemetry, run no shell commands or background services, and persist no
+credentials or page content themselves. Hermes may retain tool results in its
+normal conversation history. Credentials are resolved through Hermes' active
+profile API. HTTP redirects from the service endpoint are refused so its Bearer
+token is not forwarded to a different endpoint.
 
-## Development and validation
+Use HTTPS when connecting across an untrusted network. The service may be on a
+private address; model-provided crawl targets remain subject to Hermes' URL
+policy. Crawl4AI's own redirect/subresource protections must also be configured:
+checking a returned URL cannot undo a request the remote browser already made.
 
-```bash
-python3.14 -m venv .venv
-source .venv/bin/activate
-pip install -e ../hermes-agent
-pip install -e '.[dev]'
-pytest -q
+## Testing and development
+
+CI tests Hermes v0.23.0 on Linux, macOS, and Windows, plus Hermes main on Linux.
+It exercises HTTP request/response contracts, real plugin discovery from a
+copied directory, backend selection, manifest validation, and a built wheel
+installed outside the source import path.
+
+For development with a working Hermes environment, install `.[dev]` there.
+For an isolated test harness, use a fresh Python 3.14 virtual environment and:
+
+```sh
+git clone --branch v0.23.0 --depth 1 https://github.com/NousResearch/hermes-agent.git ../hermes-agent
+python -m pip install --no-deps -e ../hermes-agent
+python -m pip install -r tests/requirements-host.txt '.[dev]' build
+python -m pytest -q
 ruff check .
 hermes plugins doctor . --ci
 hermes plugins validate .
+python -m build
 ```
 
-Uses the current native `plugin.yaml` + `register(ctx)` format and a pip entry
-point. It declares its dependencies, configuration schema, and web provider.
-No custom tool or privileged capability is needed.
+The minimal host requirements are for plugin contract tests, not a complete
+Hermes agent installation. Normal users install Hermes using its official
+installer and then install this plugin; they should not rebuild Hermes with pip.
 
-Validated on Python 3.11 and 3.14 on 2026-11-06 against Hermes main commit
-`6b21d0564de0492e2ebd0d8f63fca86c03b5c892`: HTTP contract tests, real directory
-and pip discovery, Plugin Doctor, and catalog validation. The pair was also
-loaded together in an isolated profile. No live SearXNG service was exercised.
-CI follows Hermes main to catch host compatibility changes.
+To run the real-service tests with Docker available:
 
-Reference: [Hermes plugin guide](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins)
-and [web provider contract](https://hermes-agent.nousresearch.com/docs/developer-guide/web-search-provider-plugin).
+```sh
+python tests/run_live.py
+```
+
+This pulls a pinned official service image, generates disposable credentials,
+binds a random localhost port, uses a temporary Hermes home, exercises actual
+HTTP calls, and removes the container afterward. It does not use your configured
+server or credentials. External network access is needed for search engines and
+test pages. The GitHub **Live service test** workflow runs the same command on
+request; external services can fail independently of the plugin.
+
+The live runner pins the official SearXNG image published on 2026-11-06.
+`SEARXNG_TEST_URL` can instead point `tests/test_live_searxng.py` at your own
+disposable JSON-enabled server.
+
+## Compatibility
+
+Uses the native `plugin.yaml` + `register(ctx)` format, declared Python
+dependencies, a configuration schema, and a pip entry point. No private Hermes
+APIs, core overrides, custom tool, or privileged capability are required.
 
 ## License
 
