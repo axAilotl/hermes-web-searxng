@@ -78,6 +78,24 @@ The backend ID is `searxng-local`, so it coexists with Hermes' built-in
 optional Bearer authentication; it does not replace core tools. To return to
 the built-in provider, select `web.search_backend: searxng` and disable this plugin.
 
+### Updating from 0.1.0
+
+Version **0.1.1** fixes the synchronous search contract required by Hermes:
+0.1.0 could fail with `'coroutine' object has no attribute 'get'` in `web_search`.
+Update the plugin, then restart the Hermes process serving the affected profile
+(CLI session, gateway, or Desktop backend). Disabling and enabling a plugin in
+the same process may retain its already-imported Python module.
+
+```sh
+hermes plugins update hermes-web-searxng
+```
+
+If searches succeed but contain no results, check the SearXNG instance's engine
+health. Captchas, rate limits, and blocked outbound requests are server/engine
+problems. The optional `engines` setting can select engines that work for your
+instance; no engine list is guaranteed across networks. Selecting this backend
+does not configure automatic Tavily fallback.
+
 ## Use both plugins together
 
 Install each independently:
@@ -128,7 +146,8 @@ checking a returned URL cannot undo a request the remote browser already made.
 
 CI tests Hermes v0.23.0 on Linux, macOS, and Windows, plus Hermes main on Linux.
 It exercises HTTP request/response contracts, real plugin discovery from a
-copied directory, backend selection, manifest validation, and a built wheel
+copied directory, the actual synchronous `web_search_tool` dispatcher against a
+local HTTP server (success and failure), backend selection, manifest validation, and a built wheel
 installed outside the source import path.
 
 For development with a working Hermes environment, install `.[dev]` there.
@@ -157,7 +176,7 @@ python tests/run_live.py
 
 This pulls a pinned official service image, generates disposable credentials,
 binds a random localhost port, uses a temporary Hermes home, exercises actual
-HTTP calls, and removes the container afterward. It does not use your configured
+HTTP calls through Hermes' real search dispatcher, and removes the container afterward. It does not use your configured
 server or credentials. External network access is needed for search engines and
 test pages. The GitHub **Live service test** workflow runs the same command on
 request; external services can fail independently of the plugin.

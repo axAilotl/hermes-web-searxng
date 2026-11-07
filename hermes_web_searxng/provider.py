@@ -44,7 +44,7 @@ class SearXNGWebSearchProvider(WebSearchProvider):
     def supports_extract(self) -> bool:
         return False
 
-    async def search(self, query: str, limit: int = 5) -> dict[str, Any]:
+    def search(self, query: str, limit: int = 5) -> dict[str, Any]:
         try:
             if not isinstance(query, str) or not query.strip():
                 return {"success": False, "error": "A non-empty search query is required"}
@@ -63,8 +63,8 @@ class SearXNGWebSearchProvider(WebSearchProvider):
             token = get_provider_env("SEARXNG_API_TOKEN")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
-                response = await client.get(f"{base_url}/search", params=params, headers=headers)
+            with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+                response = client.get(f"{base_url}/search", params=params, headers=headers)
                 response.raise_for_status()
                 data = response.json()
             if not isinstance(data, dict) or not isinstance(data.get("results"), list):

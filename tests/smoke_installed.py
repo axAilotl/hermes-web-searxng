@@ -1,6 +1,7 @@
 """Run after installing the built wheel, from outside the source import path."""
 
 import importlib
+import inspect
 import os
 import tempfile
 from pathlib import Path
@@ -33,6 +34,7 @@ with tempfile.TemporaryDirectory() as temporary:
         assert loaded.enabled and not loaded.error, loaded.error
         provider = web_search_registry.get_active_search_provider()
         assert provider.name == "searxng-local" and provider.is_available()
+        assert not inspect.iscoroutinefunction(provider.search), "Hermes search must be synchronous"
         print(f"Installed wheel discovered and selected: {PLUGIN}")
     finally:
         manager.unload()

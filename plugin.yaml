@@ -1,5 +1,5 @@
 name: hermes-web-searxng
-version: 0.1.0
+version: 0.1.1
 description: "Standalone SearXNG search backend for Hermes."
 author: axAilotl
 kind: backend

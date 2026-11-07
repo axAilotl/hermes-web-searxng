@@ -18,15 +18,15 @@ def provider():
 
 
 def mock_http(monkeypatch, handler):
-    client = httpx.AsyncClient
+    client = httpx.Client
     monkeypatch.setattr(
         module.httpx,
-        "AsyncClient",
+        "Client",
         lambda **kwargs: client(transport=httpx.MockTransport(handler), **kwargs),
     )
 
 
-async def test_search_request_and_result_contract(monkeypatch):
+def test_search_request_and_result_contract(monkeypatch):
     settings = {
         "api_url": "http://localhost:8080/base/",
         "language": "en",
@@ -68,7 +68,7 @@ async def test_search_request_and_result_contract(monkeypatch):
         )
 
     mock_http(monkeypatch, respond)
-    result = await provider.search("some words & symbols", limit=2)
+    result = provider.search("some words & symbols", limit=2)
     assert result == {
         "success": True,
         "data": {
@@ -88,28 +88,28 @@ async def test_search_request_and_result_contract(monkeypatch):
 @pytest.mark.parametrize(
     "status,body", [(403, {}), (500, {}), (200, []), (200, {"results": {}}), (200, "not json")]
 )
-async def test_errors_are_tool_results(monkeypatch, provider, status, body):
+def test_errors_are_tool_results(monkeypatch, provider, status, body):
     mock_http(
         monkeypatch,
         lambda request: httpx.Response(
             status, content=(body if isinstance(body, str) else json.dumps(body))
         ),
     )
-    result = await provider.search("test")
+    result = provider.search("test")
     assert result["success"] is False
     if status == 403:
         assert "formats" in result["error"]
 
 
-async def test_timeout_is_contained(monkeypatch, provider):
+def test_timeout_is_contained(monkeypatch, provider):
     def respond(request):
         raise httpx.ReadTimeout("timeout", request=request)
 
     mock_http(monkeypatch, respond)
-    assert (await provider.search("test"))["success"] is False
+    assert (provider.search("test"))["success"] is False
 
 
-async def test_service_redirect_is_not_followed(monkeypatch, provider):
+def test_service_redirect_is_not_followed(monkeypatch, provider):
     requests = []
 
     def respond(request):
@@ -117,7 +117,7 @@ async def test_service_redirect_is_not_followed(monkeypatch, provider):
         return httpx.Response(302, headers={"Location": "https://other.example/search"})
 
     mock_http(monkeypatch, respond)
-    assert (await provider.search("test"))["success"] is False
+    assert (provider.search("test"))["success"] is False
     assert len(requests) == 1
 
 
@@ -131,14 +131,14 @@ async def test_service_redirect_is_not_followed(monkeypatch, provider):
         "https://example.com?token=secret",
     ],
 )
-async def test_bad_configuration_never_makes_request(monkeypatch, url):
+def test_bad_configuration_never_makes_request(monkeypatch, url):
     def no_http(**kwargs):
         pytest.fail("invalid configuration opened an HTTP client")
 
-    monkeypatch.setattr(module.httpx, "AsyncClient", no_http)
+    monkeypatch.setattr(module.httpx, "Client", no_http)
     provider = SearXNGWebSearchProvider({"api_url": url}.get)
     assert provider.is_available() is False
-    assert (await provider.search("test"))["success"] is False
+    assert (provider.search("test"))["success"] is False
 
 
 def test_settings_are_dynamic_and_env_is_fallback(monkeypatch):
@@ -154,11 +154,11 @@ def test_settings_are_dynamic_and_env_is_fallback(monkeypatch):
 
 
 @pytest.mark.parametrize("limit,expected", [(-1, 1), (0, 1), (100, 20)])
-async def test_limits_are_bounded(monkeypatch, provider, limit, expected):
+def test_limits_are_bounded(monkeypatch, provider, limit, expected):
     mock_http(
         monkeypatch,
         lambda request: httpx.Response(
             200, json={"results": [{"url": f"https://example.com/{i}"} for i in range(30)]}
         ),
     )
-    assert len((await provider.search("test", limit))["data"]["web"]) == expected
+    assert len((provider.search("test", limit))["data"]["web"]) == expected
